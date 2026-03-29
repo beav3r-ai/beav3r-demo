@@ -32,7 +32,7 @@ Official repo: https://github.com/beav3r-ai/beav3r-demo
 4. Run the script:
 
    ```bash
-   npm start
+   node beav3r-quickstart.mjs
    ```
 
 ## Notes
