@@ -1,8 +1,9 @@
-# beav3r-scripts
+# beav3r-demo
 
 Minimal Node.js quickstart for the Beav3r SDK.
 
 Reference docs: https://docs.beav3r.ai/sdk/run-your-first-script
+Official repo: https://github.com/beav3r-ai/beav3r-demo
 
 ## Requirements
 
