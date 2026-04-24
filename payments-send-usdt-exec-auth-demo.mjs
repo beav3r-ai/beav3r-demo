@@ -6,8 +6,6 @@ import {
   InMemoryReplayStore,
 } from "./executor-auth-middleware.mjs";
 
-const { Beav3r } = beav3rSdk;
-
 const requiredEnvVars = ["BEAV3R_API_KEY"];
 const missingEnvVars = requiredEnvVars.filter((name) => {
   const value = process.env[name]?.trim();
@@ -25,6 +23,7 @@ if (missingEnvVars.length > 0) {
 }
 
 const EXECUTOR_AUDIENCE = "payments-executor";
+const { Beav3r, verifyExecutionAuthorization } = beav3rSdk;
 
 const client = new Beav3r({
   apiKey: process.env.BEAV3R_API_KEY,
@@ -42,8 +41,6 @@ const intendedAction = {
     recipient: "0x1111111111111111111111111111111111111111",
     summary: "Send 25 USDT to treasury wallet",
   },
-  // Current SDK may ignore this field. Newer SDK/server flow should consume it.
-  audience: EXECUTOR_AUDIENCE,
   attributes: {
     executionAudience: EXECUTOR_AUDIENCE,
   },
@@ -78,12 +75,6 @@ async function main() {
     EXECUTOR_AUDIENCE,
   );
 
-  const verifyExecutionAuthorization =
-    beav3rSdk.verifyExecutionAuthorization ??
-    (typeof client.verifyExecutionAuthorization === "function"
-      ? client.verifyExecutionAuthorization.bind(client)
-      : undefined);
-
   const authorizeExecution = createExecutorAuthMiddleware({
     audience: EXECUTOR_AUDIENCE,
     verifyExecutionAuthorization,
@@ -111,45 +102,25 @@ async function requireExecutionAuthorizationArtifact(beav3rClient, context) {
   const { guardResult, actionId, audience } = context;
 
   const fromGuardResult = extractStructuredArtifact(
-    guardResult?.executionAuthorizationArtifact ??
-      guardResult?.executionAuthorization?.artifact ??
-      guardResult?.execution?.authorizationArtifact,
+    guardResult?.executionAuthorizationArtifact,
     "guardAndWait result",
   );
   if (fromGuardResult) {
     return fromGuardResult;
   }
 
-  const fetchArtifactMethod =
-    beav3rClient.mintExecutionAuthorization ??
-    beav3rClient.getExecutionAuthorizationArtifact ??
-    beav3rClient.mintExecutionAuthorizationArtifact ??
-    beav3rClient.issueExecutionAuthorizationArtifact ??
-    beav3rClient.getExecutionArtifact ??
-    beav3rClient.mintExecutionArtifact ??
-    beav3rClient.issueExecutionArtifact;
-
-  if (typeof fetchArtifactMethod !== "function") {
-    throw new Error(
-      "No execution authorization artifact is present on guard result and SDK does not expose an artifact mint/get method.",
-    );
-  }
-
-  const response = await fetchArtifactMethod.call(beav3rClient, {
+  const response = await beav3rClient.mintExecutionAuthorization({
     actionId,
     audience,
   });
 
   const fromResponse = extractStructuredArtifact(
-    response?.executionAuthorizationArtifact ??
-      response?.executionAuthorization?.artifact ??
-      response?.artifact ??
-      response,
-    "artifact mint/get response",
+    response?.executionAuthorizationArtifact ?? response,
+    "mintExecutionAuthorization response",
   );
   if (!fromResponse) {
     throw new Error(
-      "Execution authorization artifact was not returned from SDK mint/get response.",
+      "Execution authorization artifact was not returned from mintExecutionAuthorization.",
     );
   }
   return fromResponse;

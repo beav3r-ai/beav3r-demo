@@ -8,6 +8,7 @@ Official repo: https://github.com/beav3r-ai/beav3r-demo
 ## Requirements
 
 - Node.js 20+
+- `@beav3r/sdk@2.0.0-beta.1` (installed via `npm install`)
 
 ## Setup
 
@@ -77,10 +78,9 @@ BEAV3R_EXECUTION_VERIFICATION_KEYS_JSON={"exec_key_1":"base64-ed25519-public-key
 
 ## Assumptions
 
-- This demo uses expected SDK method shapes for planned exec-auth APIs.
-- `verifyExecutionAuthorization` helper is required for structured artifact verification.
-- Expected artifact field is `executionAuthorizationArtifact` on guard/artifact responses.
-- If your SDK version does not expose `verifyExecutionAuthorization`, the demo fails closed with an explicit error.
+- This demo targets the published beta API (`@beav3r/sdk@2.0.0-beta.1`).
+- `verifyExecutionAuthorization` is used for structured artifact verification.
+- `guardAndWait(..., { audience })` returns `executionAuthorizationArtifact` on allow states; fallback mint uses `mintExecutionAuthorization`.
 
 ## Notes
 
