@@ -5,7 +5,8 @@
   "license": "ISC",
   "author": "",
   "scripts": {
-    "start": "node beav3r-quickstart.mjs"
+    "start": "node beav3r-quickstart.mjs",
+    "exec-auth-demo": "node payments-send-usdt-exec-auth-demo.mjs"
   },
   "engines": {
     "node": ">=20"
