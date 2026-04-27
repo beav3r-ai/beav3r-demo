@@ -1,18 +1,18 @@
 {
   "name": "beav3r-demo",
   "version": "1.0.0",
-  "description": "Beav3r SDK quickstart with environment-based configuration",
+  "description": "Beav3r v2 permission -> spend -> execute demo",
   "license": "ISC",
   "author": "",
   "scripts": {
-    "start": "node beav3r-quickstart.mjs",
-    "exec-auth-demo": "node payments-send-usdt-exec-auth-demo.mjs"
+    "start": "node index.mjs",
+    "exec-auth-demo": "node index.mjs"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "@beav3r/sdk": "2.0.0-beta.1",
+    "@beav3r/sdk": "2.0.0-beta.4",
     "dotenv": "^17.3.1"
   }
 }

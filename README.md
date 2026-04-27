@@ -1,6 +1,6 @@
 # beav3r-demo
 
-Minimal Node.js quickstart plus an executor auth e2e sample for `payments.send_usdt`.
+Minimal Beav3r v2 `payments.send_usdt` demo for the permission -> spend -> execute flow.
 
 Reference docs: https://docs.beav3r.ai/sdk/run-your-first-script
 Official repo: https://github.com/beav3r-ai/beav3r-demo
@@ -8,7 +8,7 @@ Official repo: https://github.com/beav3r-ai/beav3r-demo
 ## Requirements
 
 - Node.js 20+
-- `@beav3r/sdk@2.0.0-beta.1` (installed via `npm install`)
+- `@beav3r/sdk@2.0.0-beta.4` (installed via `npm install`)
 
 ## Setup
 
@@ -30,60 +30,50 @@ Official repo: https://github.com/beav3r-ai/beav3r-demo
    BEAV3R_API_KEY=replace-with-your-real-beav3r-api-key
    ```
 
-4. Run the base quickstart:
+4. Run the v2 demo:
 
    ```bash
    npm start
    ```
 
-5. Run the exec-auth e2e sample:
+## Permission -> Spend -> Execute (`payments.send_usdt`)
 
-   ```bash
-   npm run exec-auth-demo
-   ```
+`index.mjs` is the only demo script and demonstrates the intended offchain executor flow:
 
-## Exec-Auth E2E Flow (`payments.send_usdt`)
+1. `guardAndWait(...)` asks Beav3r for permission for `payments.send_usdt`
+2. if approved, use the structured execution authorization artifact returned by `guardAndWait(...)`
+3. fetch the exact action request via `getAction(actionId)`
+4. load trusted Beav3r verification keys from `BEAV3R_EXECUTION_VERIFICATION_KEYS_JSON`
+5. `authorizeAndExecute(...)` verifies the artifact locally, redeems it once with Beav3r, then runs the real payment callback
 
-`payments-send-usdt-exec-auth-demo.mjs` demonstrates:
+The important split is:
 
-1. `guardAndWait` for `payments.send_usdt` with `audience=payments-executor`
-2. require `executionAuthorizationArtifact` from `guardAndWait` result or artifact mint/get API
-3. fetch exact action request via `getAction(actionId)`
-4. verify structured artifact with SDK `verifyExecutionAuthorization`
-5. recompute `actionHash` from exact action request and enforce replay one-time consumption (`artifactId`/`jti`)
-6. execute payment only after middleware authorization succeeds
+- `guardAndWait` = permission
+- `authorizeAndExecute` = spend + execute
 
-`executor-auth-middleware.mjs` fail-closes on:
+That keeps replay protection inside the spend phase rather than making every integrator hand-roll verification, redemption, and callback sequencing.
 
-- missing artifact
-- invalid artifact verification
-- expired artifact
-- action hash mismatch (artifact vs recomputed hash)
-- replay (`artifactId`/`jti` reuse)
+The SDK verifier automatically ignores Beav3r display-only `payload.presentation` metadata, so the `getAction(...)` response can flow directly into executor verification without manual stripping.
 
 ## Exec-Auth Config
 
 Optional env fallback if SDK key-fetch API is unavailable:
 
 ```env
-BEAV3R_EXECUTION_VERIFICATION_KEYS_JSON={"exec_key_1":"base64-ed25519-public-key"}
+BEAV3R_EXECUTION_VERIFICATION_KEYS_JSON={"your-server-execution-auth-key-id":"base64-ed25519-public-key"}
 ```
+
+The JSON key must match the server signing `keyId` embedded in the artifact payload. In the current server setup, that is the same value as `EXECUTION_AUTH_KEY_ID`.
 
 ## Threat Model Notes
 
-- Replay: middleware requires single-use `jti` and rejects reused tokens.
-- Tampering: structured execution artifact must pass SDK verification and action hash recomputation before execution.
-- Bypass: executor must route all `payments.send_usdt` calls through middleware; no direct execute path.
-- Trust boundaries: guard/mint service is trusted to issue artifacts, executor trusts only pinned verification keys and exact action hash recomputation.
+- Replay: the same artifact must be redeemed once before execution; a second redemption fails closed.
+- Tampering: structured execution artifacts must pass SDK verification and exact action hash recomputation before execution.
+- Bypass: executor must route all `payments.send_usdt` calls through `authorizeAndExecute(...)`; no direct execute path.
+- Trust boundaries: guard/mint service is trusted to issue artifacts, executor trusts only pinned verification keys and the exact action hash recomputed from the request it will actually execute.
 
 ## Assumptions
 
-- This demo targets the published beta API (`@beav3r/sdk@2.0.0-beta.1`).
-- `verifyExecutionAuthorization` is used for structured artifact verification.
-- `guardAndWait(..., { audience })` returns `executionAuthorizationArtifact` on allow states; fallback mint uses `mintExecutionAuthorization`.
-
-## Notes
-
-- `.env` is ignored by git and should not be committed.
-- The script loads `.env` with `dotenv` and exits early if `BEAV3R_API_KEY` is missing.
-- You can override `BEAV3R_BASE_URL`, `BEAV3R_AGENT_ID`, and `BEAV3R_DEFAULT_EXPIRY_SECONDS` in `.env` if needed.
+- This demo targets the published beta API (`@beav3r/sdk@2.0.0-beta.4`).
+- `guardAndWait(..., { audience })` returns `executionAuthorizationArtifact` on allow states.
+- `authorizeAndExecute(...)` is the recommended executor entrypoint for offchain spend protection.
