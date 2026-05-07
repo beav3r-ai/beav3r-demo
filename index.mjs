@@ -18,13 +18,17 @@ if (missingEnvVars.length > 0) {
 }
 
 const EXECUTOR_AUDIENCE = "payments-executor";
-const VERIFICATION_KEYS = JSON.parse(
-  process.env.BEAV3R_EXECUTION_VERIFICATION_KEYS_JSON ?? "{}",
-);
+const BASE_URL = (process.env.BEAV3R_BASE_URL ?? "https://staging.server.beav3r.ai").trim();
+
+if (BASE_URL.includes("dashboard.")) {
+  throw new Error(
+    `BEAV3R_BASE_URL must point to the API server, not the dashboard UI. Use https://staging.server.beav3r.ai (current: ${BASE_URL}).`,
+  );
+}
 
 const client = new Beav3r({
   apiKey: process.env.BEAV3R_API_KEY,
-  baseUrl: process.env.BEAV3R_BASE_URL ?? "https://staging.server.beav3r.ai",
+  baseUrl: BASE_URL,
   agentId: process.env.BEAV3R_AGENT_ID ?? "sdk_exec_auth_demo",
   defaultExpirySeconds: Number(process.env.BEAV3R_DEFAULT_EXPIRY_SECONDS ?? 180),
 });
@@ -43,6 +47,20 @@ const intendedAction = {
   },
 };
 
+function debugDeniedGuardResult(result) {
+  const payload = {
+    status: result?.status,
+    actionId: result?.actionId,
+    reason: result?.reason ?? result?.denialReason ?? null,
+    error: result?.error ?? null,
+    evaluation: result?.evaluation ?? result?.lastEvaluation ?? null,
+    approval: result?.approval ?? null,
+    raw: result ?? null,
+  };
+  console.error("Guard request denied or not approved:");
+  console.error(JSON.stringify(payload, null, 2));
+}
+
 async function main() {
   // Step 1: ask Beav3r for permission for one exact action.
   const guardResult = await client.guardAndWait(intendedAction, {
@@ -52,6 +70,7 @@ async function main() {
   });
 
   if (guardResult.status !== "approved" && guardResult.status !== "executed") {
+    debugDeniedGuardResult(guardResult);
     throw new Error(
       `Action was not approved for execution. status=${guardResult.status} actionId=${guardResult.actionId}`,
     );
@@ -64,26 +83,32 @@ async function main() {
       "guardAndWait did not return an execution authorization artifact. Run this demo against the v2 execution-auth flow.",
     );
   }
-  
-  if (!VERIFICATION_KEYS[artifact.payload.keyId]) {
+
+  // Step 3: fetch trusted execution-authorization verification keys from
+  // server transport (/.well-known/execution-authorization-keys).
+  const keyResponse = await client.getExecutionAuthorizationKeys();
+  const verificationKeys = Object.fromEntries(
+    (keyResponse.items ?? []).map((item) => [item.keyId, item.publicKey]),
+  );
+  if (!verificationKeys[artifact.payload.keyId]) {
     throw new Error(
-      `Missing trusted public key for keyId "${artifact.payload.keyId}" in BEAV3R_EXECUTION_VERIFICATION_KEYS_JSON.`,
+      `Missing trusted public key for keyId "${artifact.payload.keyId}" from /.well-known/execution-authorization-keys.`,
     );
   }
 
-  // Step 3: fetch the exact action request that the executor will spend.
+  // Step 4: fetch the exact action request that the executor will spend.
   const action =
     typeof client.getExactActionRequest === "function"
       ? await client.getExactActionRequest(guardResult.actionId)
       : await client.getAction(guardResult.actionId);
 
-  // Step 4: verify the artifact locally, redeem it once with Beav3r,
+  // Step 5: verify the artifact locally, redeem it once with Beav3r,
   // then run the real side effect.
   const execution = await client.authorizeAndExecute({
     action,
     artifact,
     audience: EXECUTOR_AUDIENCE,
-    publicKeys: VERIFICATION_KEYS,
+    publicKeys: verificationKeys,
     execute: async ({ action, redemption }) => {
       await executePaymentSendUsdt(action);
       return {
